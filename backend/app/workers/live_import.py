@@ -1,0 +1,244 @@
+"""受控真实股票日线入库，复用现有质量检查与事务导入逻辑。"""
+
+from __future__ import annotations
+
+import sqlite3
+from datetime import date
+
+from backend.app.db import repository
+from backend.app.quality.checker import check_records
+from backend.app.workers.jobs import TaskExecutionError, TaskResult
+from backend.app.workers.synthetic_import import import_batch
+
+
+DAILY_BAR_CONTENT_FIELDS = ("open", "high", "low", "close", "volume", "turnover")
+
+
+def validate_live_stock_records(records, asset_id: str) -> None:
+    validate_live_daily_records(records, asset_id, "stock")
+
+
+def validate_live_daily_records(records, asset_id: str, asset_type: str) -> None:
+    quality = check_records(records, [], {asset_id: asset_type})
+    errors = quality.by_severity.get("error", 0)
+    if errors:
+        raise TaskExecutionError(
+            "输入质量检查失败，整批拒绝写入",
+            error_code="INPUT_QUALITY_FAILED",
+            summary={
+                "input_count": len(records),
+                "issue_count": quality.issue_count,
+                "by_severity": quality.by_severity,
+                "issues": [issue.rule_id for issue in quality.issues],
+                "committed": False,
+            },
+        )
+
+
+def _bar_key(record) -> tuple:
+    trade_date = record.trade_date
+    if isinstance(trade_date, date):
+        trade_date = trade_date.isoformat()
+    return (record.asset_id, trade_date, record.adjustment_mode)
+
+
+def _bar_content(record) -> tuple:
+    return tuple(getattr(record, field) for field in DAILY_BAR_CONTENT_FIELDS)
+
+
+def classify_live_stock_changes(conn: sqlite3.Connection, asset_id: str, records) -> dict:
+    """按 (asset_id, trade_date, adjustment_mode) 比较输入与库内记录。"""
+    existing = {_bar_key(record): record for record in repository.query_daily_bars(conn, asset_id)}
+    new = []
+    unchanged = []
+    changed = []
+
+    for record in records:
+        key = _bar_key(record)
+        old = existing.get(key)
+        if old is None:
+            new.append(record)
+            continue
+        diffs = [
+            field
+            for field in DAILY_BAR_CONTENT_FIELDS
+            if getattr(old, field) != getattr(record, field)
+        ]
+        if not diffs:
+            unchanged.append(record)
+            continue
+        changed.append(
+            {
+                "trade_date": key[1],
+                "adjustment_mode": key[2],
+                "fields": diffs,
+                "old": {field: getattr(old, field) for field in diffs},
+                "new": {field: getattr(record, field) for field in diffs},
+            }
+        )
+
+    return {"new": new, "unchanged": unchanged, "changed": changed}
+
+
+def import_live_stock_incremental(conn: sqlite3.Connection, asset_id: str, records) -> dict:
+    """增量导入新日期，报告相同记录与历史差异，不覆盖历史记录。"""
+    return import_live_daily_incremental(conn, asset_id, "stock", records)
+
+
+def import_live_daily_incremental(
+    conn: sqlite3.Connection,
+    asset_id: str,
+    asset_type: str,
+    records,
+) -> dict:
+    """通用日线增量导入，适用于股票、指数、ETF；不覆盖历史记录。"""
+    validate_live_daily_records(records, asset_id, asset_type)
+    diff = classify_live_stock_changes(conn, asset_id, records)
+
+    outcome = None
+    if diff["new"]:
+        try:
+            outcome = import_batch(conn, asset_id, diff["new"], "daily_bar")
+        except TaskExecutionError as exc:
+            committed = exc.error_code == "POST_CHECK_FAILED"
+            raise TaskExecutionError(
+                exc.args[0],
+                error_code=exc.error_code,
+                summary={**exc.summary, "committed": committed},
+            ) from exc
+
+    inserted = outcome.inserted if outcome else 0
+    post_check_issue_count = outcome.post_check_issue_count if outcome else 0
+    return {
+        "input_count": len(records),
+        "new_count": len(diff["new"]),
+        "unchanged_count": len(diff["unchanged"]),
+        "changed_count": len(diff["changed"]),
+        "changed": diff["changed"],
+        "inserted": inserted,
+        "skipped": len(diff["unchanged"]) + len(diff["changed"]),
+        "conflicts": len(diff["changed"]),
+        "failed": 0,
+        "post_check_issue_count": post_check_issue_count,
+        "committed": True,
+    }
+
+
+def revise_live_stock(
+    conn: sqlite3.Connection,
+    asset_id: str,
+    records,
+    reason: str = "manual_revision",
+) -> dict:
+    """显式修订库内同键记录，审计旧值/新值并在单事务内更新。"""
+    validate_live_stock_records(records, asset_id)
+    existing = {_bar_key(record): record for record in repository.query_daily_bars(conn, asset_id)}
+    changes = []
+
+    for record in records:
+        key = _bar_key(record)
+        old = existing.get(key)
+        if old is None:
+            raise TaskExecutionError(
+                f"修订目标不存在：{key[1]}",
+                error_code="REVISION_TARGET_MISSING",
+                summary={"asset_id": asset_id, "trade_date": key[1], "committed": False},
+            )
+        diffs = [
+            field
+            for field in DAILY_BAR_CONTENT_FIELDS
+            if getattr(old, field) != getattr(record, field)
+        ]
+        if diffs:
+            changes.append((old, record, diffs))
+
+    if not changes:
+        return {
+            "input_count": len(records),
+            "revised": 0,
+            "changed_dates": [],
+            "post_check_issue_count": 0,
+            "committed": True,
+        }
+
+    with conn:
+        for old, record, diffs in changes:
+            repository.insert_daily_bars(conn, [record], replace=True)
+            for field in diffs:
+                repository.record_daily_bar_revision(
+                    conn,
+                    asset_id,
+                    record.trade_date,
+                    record.adjustment_mode,
+                    field,
+                    getattr(old, field),
+                    getattr(record, field),
+                    reason,
+                )
+
+    post_quality = check_records(repository.query_daily_bars(conn, asset_id), [], {asset_id: "stock"})
+    changed_dates = [record.trade_date.isoformat() for _, record, _ in changes]
+    if post_quality.issue_count:
+        raise TaskExecutionError(
+            "写入后检查发现问题",
+            error_code="POST_CHECK_FAILED",
+            summary={
+                "revised": len(changes),
+                "changed_dates": changed_dates,
+                "post_check_issue_count": post_quality.issue_count,
+                "by_severity": post_quality.by_severity,
+                "committed": True,
+            },
+        )
+
+    return {
+        "input_count": len(records),
+        "revised": len(changes),
+        "changed_dates": changed_dates,
+        "post_check_issue_count": 0,
+        "committed": True,
+    }
+
+
+def import_live_stock(conn: sqlite3.Connection, asset_id: str, records) -> dict:
+    """写入真实日线并返回稳定的结果摘要；不覆盖已有记录。"""
+    validate_live_stock_records(records, asset_id)
+    try:
+        outcome = import_batch(conn, asset_id, records, "daily_bar")
+    except TaskExecutionError as exc:
+        committed = exc.error_code == "POST_CHECK_FAILED"
+        raise TaskExecutionError(
+            exc.args[0],
+            error_code=exc.error_code,
+            summary={**exc.summary, "committed": committed},
+        ) from exc
+
+    return {
+        "input_count": outcome.input_count,
+        "inserted": outcome.inserted,
+        "skipped": outcome.skipped,
+        "conflicts": outcome.conflicts,
+        "failed": 0,
+        "post_check_issue_count": outcome.post_check_issue_count,
+        "committed": True,
+    }
+
+
+def live_stock_import_handler(conn, job_id: str, asset_id: str, records) -> TaskResult:
+    del job_id
+    result = import_live_stock(conn, asset_id, records)
+    return TaskResult(
+        processed_records=result["input_count"],
+        succeeded_records=result["inserted"],
+        summary=result,
+    )
+
+
+def live_stock_revision_handler(conn, job_id: str, asset_id: str, records) -> TaskResult:
+    del job_id
+    result = revise_live_stock(conn, asset_id, records)
+    return TaskResult(
+        processed_records=result["input_count"],
+        succeeded_records=result["revised"],
+        summary=result,
+    )

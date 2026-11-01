@@ -1,0 +1,14 @@
+# 示例配置。具体默认看板在数据源许可与公开展示条件确认后再定稿。
+assets:
+  - symbol: "000001"
+    market: "SZ"
+    asset_type: "stock"
+    adjustment_mode: "qfq"
+  - symbol: "000001"
+    market: "SH"
+    asset_type: "index"
+  - symbol: "510300"
+    market: "SH"
+    asset_type: "etf"
+  - symbol: "110022"
+    asset_type: "open_fund"

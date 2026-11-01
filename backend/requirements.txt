@@ -1,0 +1,8 @@
+# 阶段 0/1A 已实测固定版本。
+akshare==1.20.18
+pandas==3.1.0
+requests==2.34.2
+# 阶段 1B-1 只读 API。
+fastapi==0.162.0
+uvicorn==0.54.0
+httpx==0.28.1

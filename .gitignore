@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# 本地环境与密钥
+.env
+*.pem
+my_key.pem
+
+# 真实行情与数据库快照：不可随仓库再分发
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/samples/
+
+# 前端构建与依赖
+node_modules/
+dist/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
