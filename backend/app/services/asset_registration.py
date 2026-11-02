@@ -115,6 +115,26 @@ def normalize_index_code(code: str) -> str:
     return normalized
 
 
+def normalize_stock_code(code: str) -> str:
+    normalized = code.strip().lower()
+    if len(normalized) == 6 and normalized.isdigit():
+        prefix = {
+            "6": "sh",
+            "9": "sh",
+            "0": "sz",
+            "2": "sz",
+            "3": "sz",
+            "4": "bj",
+            "8": "bj",
+        }.get(normalized[0])
+        if prefix is None:
+            return normalized
+        return prefix + normalized
+    if len(normalized) == 8 and normalized[:2] in ("sh", "sz", "bj") and normalized[2:].isdigit():
+        return normalized
+    return normalized
+
+
 def register_asset(
     asset_type: str,
     code: str,
@@ -126,7 +146,7 @@ def register_asset(
     backoff: float = 1.0,
 ) -> dict:
     if asset_type == "stock":
-        normalized = normalize_index_code(code)
+        normalized = normalize_stock_code(code)
         if len(normalized) != 8 or normalized[:2] not in ("sh", "sz", "bj") or not normalized[2:].isdigit():
             raise ValueError("股票代码格式应为 sh/sz/bj 加 6 位数字")
         market_value = market or normalized[:2].upper()
@@ -250,7 +270,7 @@ def expand_asset(
 ) -> dict:
     """为已注册资产扩展历史，复用注册路径的校验、抓取和幂等导入。"""
     if asset_type == "stock":
-        normalized = normalize_index_code(code)
+        normalized = normalize_stock_code(code)
         if len(normalized) != 8 or normalized[:2] not in ("sh", "sz", "bj") or not normalized[2:].isdigit():
             raise ValueError("股票代码格式应为 sh/sz/bj 加 6 位数字")
         market_value = normalized[:2].upper()

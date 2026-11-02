@@ -2,12 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AnalysisPanel from "./AnalysisPanel";
 import DataManagementPanel from "./DataManagementPanel";
 import { getAssets, getHealth } from "./api/client";
+import type { ChartPeriod } from "./charts/aggregate";
 import NormalizedComparisonChart from "./charts/NormalizedComparisonChart";
 import { computeRange, type RangeKey } from "./charts/normalize";
 import type { ZoomWindow } from "./charts/sync";
+import {
+  DEFAULT_MOVING_AVERAGES,
+  type MovingAverageConfig,
+} from "./charts/movingAverage";
 import type { Asset, Health, History } from "./types";
 import AssetPanel from "./workspace/AssetPanel";
 import AssetSelector from "./workspace/AssetSelector";
+import MovingAverageControl from "./workspace/MovingAverageControl";
 import { addPanel, MAX_PANELS, removePanel } from "./workspace/panelState";
 
 const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
@@ -26,6 +32,10 @@ export default function App() {
   const [cursorDate, setCursorDate] = useState<string | null>(null);
   const [zoomRange, setZoomRange] = useState<ZoomWindow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [period, setPeriod] = useState<ChartPeriod>("daily");
+  const [movingAverages, setMovingAverages] = useState<MovingAverageConfig[]>(
+    DEFAULT_MOVING_AVERAGES,
+  );
 
   useEffect(() => {
     getHealth()
@@ -110,6 +120,15 @@ export default function App() {
             </button>
           ))}
         </div>
+        <label className="period-switch">
+          周期
+          <select value={period} onChange={(event) => setPeriod(event.target.value as ChartPeriod)}>
+            <option value="daily">日线</option>
+            <option value="weekly">周线</option>
+            <option value="monthly">月线</option>
+          </select>
+        </label>
+        <MovingAverageControl value={movingAverages} onChange={setMovingAverages} />
         {notice ? <span className="muted">{notice}</span> : null}
       </div>
 
@@ -123,6 +142,7 @@ export default function App() {
           {comparisonInputs.length ? (
             <NormalizedComparisonChart
               inputs={comparisonInputs}
+              period={period}
               range={range}
               cursorDate={cursorDate}
               onCursorChange={setCursorDate}
@@ -139,6 +159,8 @@ export default function App() {
                 <AssetPanel
                   key={asset.id}
                   asset={asset}
+                  period={period}
+                  movingAverages={movingAverages}
                   removable={panels.length > 1}
                   range={range}
                   onHistory={handleHistory}

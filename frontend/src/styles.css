@@ -115,6 +115,76 @@ button {
   margin-top: 16px;
 }
 
+.chart-lightbox {
+  position: relative;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.chart-lightbox-has-button:not(.chart-lightbox-expanded) {
+  padding-top: 34px;
+}
+
+.chart-lightbox .chart {
+  margin-top: 0;
+}
+
+.chart-lightbox-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 5;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: rgba(20, 23, 28, 0.82);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.chart-lightbox-header-button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.chart-lightbox-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chart-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(0, 0, 0, 0.68);
+  backdrop-filter: blur(4px);
+}
+
+.chart-lightbox-expanded {
+  position: fixed;
+  inset: 16px;
+  width: auto;
+  max-width: none;
+  z-index: 1000;
+  padding: 48px 12px 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.chart-lightbox-expanded .chart,
+.chart-lightbox-expanded .comparison-chart {
+  height: 100%;
+  margin-top: 0;
+}
+
+.chart-lightbox-expanded .chart-lightbox-button {
+  top: 8px;
+  right: 12px;
+}
+
 .workspace-toolbar {
   display: flex;
   align-items: center;
@@ -127,6 +197,129 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.period-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.period-switch select {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.ma-dropdown {
+  position: relative;
+}
+
+.ma-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  list-style: none;
+  user-select: none;
+}
+
+.ma-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.ma-caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--muted);
+}
+
+.ma-dropdown[open] .ma-caret {
+  transform: rotate(180deg);
+}
+
+.ma-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: 320px;
+  max-width: calc(100vw - 48px);
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.ma-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.ma-option + .ma-option {
+  border-top: 1px solid var(--border);
+}
+
+.ma-period-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ma-period-field input {
+  width: 76px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.ma-switch {
+  position: relative;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.ma-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.ma-switch.on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.ma-switch.on .ma-switch-knob {
+  transform: translateX(18px);
+  background: #ffffff;
 }
 
 .workspace {
@@ -196,6 +389,12 @@ button {
   cursor: pointer;
 }
 
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .selector {
   border: 0;
   background: transparent;
@@ -215,6 +414,27 @@ button {
   gap: 12px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
+}
+
+.result-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row-action {
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .status {
@@ -306,6 +526,16 @@ button {
 @media (max-width: 760px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .chart-lightbox-expanded {
+    inset: 8px;
+    padding: 46px 8px 8px;
+  }
+
+  .chart-lightbox-expanded .chart-lightbox-button {
+    top: 8px;
+    right: 8px;
   }
 
   .workspace {

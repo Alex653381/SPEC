@@ -9,6 +9,8 @@ import {
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import type { Asset, History } from "../types";
+import { aggregateHistory, type ChartPeriod } from "./aggregate";
+import ChartLightbox from "./ChartLightbox";
 import { normalizeSeries, type DateRange } from "./normalize";
 import { dateToIndex, visibleDates, zoomPercentFor, type ZoomWindow } from "./sync";
 
@@ -17,6 +19,7 @@ echarts.use([LineChart, DataZoomComponent, GridComponent, LegendComponent, Toolt
 interface NormalizedComparisonChartProps {
   inputs: Array<{ asset: Asset; history: History }>;
   range: DateRange;
+  period: ChartPeriod;
   cursorDate?: string | null;
   onCursorChange?: (date: string | null) => void;
   zoomRange?: ZoomWindow | null;
@@ -26,6 +29,7 @@ interface NormalizedComparisonChartProps {
 export default function NormalizedComparisonChart({
   inputs,
   range,
+  period,
   cursorDate = null,
   onCursorChange,
   zoomRange = null,
@@ -39,7 +43,7 @@ export default function NormalizedComparisonChart({
     const container = containerRef.current;
     if (!container) return;
 
-    const series = inputs.map(({ asset, history }) => normalizeSeries(asset, history, range));
+    const series = inputs.map(({ asset, history }) => normalizeSeries(asset, aggregateHistory(history, period), range));
     const valid = series.filter((item) => item.error === null && item.points.length > 0);
     const invalid = series.filter((item) => item.error !== null || item.points.length === 0);
 
@@ -119,12 +123,12 @@ export default function NormalizedComparisonChart({
       chart.dispose();
       chartRef.current = null;
     };
-  }, [inputs, range, onCursorChange, onZoomChange]);
+  }, [inputs, range, period, onCursorChange, onZoomChange]);
 
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    const series = inputs.map(({ asset, history }) => normalizeSeries(asset, history, range));
+    const series = inputs.map(({ asset, history }) => normalizeSeries(asset, aggregateHistory(history, period), range));
     const valid = series.filter((item) => item.error === null && item.points.length > 0);
     const allDates = Array.from(new Set(valid.flatMap((item) => item.points.map((point) => point.date)))).sort();
     const index = dateToIndex(allDates, cursorDate);
@@ -138,12 +142,12 @@ export default function NormalizedComparisonChart({
         chart.dispatchAction({ type: "showTip", seriesIndex, dataIndex: index });
       }
     });
-  }, [cursorDate, inputs, range]);
+  }, [cursorDate, inputs, range, period]);
 
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart || zoomRange === null) return;
-    const series = inputs.map(({ asset, history }) => normalizeSeries(asset, history, range));
+    const series = inputs.map(({ asset, history }) => normalizeSeries(asset, aggregateHistory(history, period), range));
     const valid = series.filter((item) => item.error === null && item.points.length > 0);
     const allDates = Array.from(new Set(valid.flatMap((item) => item.points.map((point) => point.date)))).sort();
     const percent = zoomPercentFor(allDates, zoomRange);
@@ -161,16 +165,18 @@ export default function NormalizedComparisonChart({
     applyingZoom.current = true;
     chart.dispatchAction({ type: "dataZoom", start: percent.start, end: percent.end });
     applyingZoom.current = false;
-  }, [zoomRange, inputs, range]);
+  }, [zoomRange, inputs, range, period]);
 
   const invalidNotes = inputs
-    .map(({ asset, history }) => normalizeSeries(asset, history, range))
+    .map(({ asset, history }) => normalizeSeries(asset, aggregateHistory(history, period), range))
     .filter((item) => item.error !== null)
     .map((item) => `${item.label}: ${item.error}`);
 
   return (
     <section className="panel comparison-panel">
-      <div ref={containerRef} className="chart comparison-chart" />
+      <ChartLightbox>
+        <div ref={containerRef} className="chart comparison-chart" />
+      </ChartLightbox>
       {invalidNotes.length ? (
         <div className="status">{invalidNotes.join(" · ")}</div>
       ) : null}

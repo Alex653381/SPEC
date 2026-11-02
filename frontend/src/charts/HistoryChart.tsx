@@ -5,12 +5,22 @@ import { DataZoomComponent, GridComponent, TooltipComponent } from "echarts/comp
 import { CanvasRenderer } from "echarts/renderers";
 import type { History } from "../types";
 import { adaptHistory } from "./adapt";
+import ChartLightbox from "./ChartLightbox";
+import {
+  computeMovingAverage,
+  MOVING_AVERAGE_COLORS,
+  MOVING_AVERAGE_LIMITS,
+  type MovingAverageConfig,
+} from "./movingAverage";
 import { dateToIndex, visibleDates, zoomPercentFor, type ZoomWindow } from "./sync";
 
 echarts.use([BarChart, CandlestickChart, LineChart, DataZoomComponent, GridComponent, TooltipComponent, CanvasRenderer]);
 
 interface HistoryChartProps {
   history: History;
+  movingAverages?: MovingAverageConfig[];
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   cursorDate?: string | null;
   onCursorChange?: (date: string | null) => void;
   zoomRange?: ZoomWindow | null;
@@ -19,6 +29,9 @@ interface HistoryChartProps {
 
 export default function HistoryChart({
   history,
+  movingAverages = [],
+  expanded,
+  onExpandedChange,
   cursorDate = null,
   onCursorChange,
   zoomRange = null,
@@ -42,7 +55,7 @@ export default function HistoryChart({
     chartRef.current?.dispose();
     const chart = echarts.init(container);
     chartRef.current = chart;
-    chart.setOption(buildOption(spec));
+    chart.setOption(buildOption(spec, movingAverages));
 
     const handleZoom = () => {
       if (applyingZoom.current) return;
@@ -73,7 +86,7 @@ export default function HistoryChart({
       chart.dispose();
       chartRef.current = null;
     };
-  }, [history, onCursorChange, onZoomChange]);
+  }, [history, movingAverages, onCursorChange, onZoomChange]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -110,16 +123,49 @@ export default function HistoryChart({
     applyingZoom.current = false;
   }, [zoomRange, history]);
 
-  return <div ref={containerRef} className="chart" />;
+  return (
+    <ChartLightbox
+      expanded={expanded}
+      onExpandedChange={onExpandedChange}
+      buttonVisibility="expanded"
+    >
+      <div ref={containerRef} className="chart" />
+    </ChartLightbox>
+  );
 }
 
-function buildOption(spec: ReturnType<typeof adaptHistory>) {
+function buildOption(
+  spec: ReturnType<typeof adaptHistory>,
+  movingAverages: MovingAverageConfig[],
+) {
   if (!spec) return {};
   const base = {
     backgroundColor: "transparent",
     tooltip: { trigger: "axis" as const },
     textStyle: { color: "#98a2b3" },
   };
+  const enabledAverages = movingAverages.filter(
+    (config) =>
+      config.enabled &&
+      Number.isFinite(config.period) &&
+      config.period >= MOVING_AVERAGE_LIMITS.min,
+  );
+  const baseValues =
+    spec.kind === "line" ? spec.values : spec.candles.map((candle) => candle[1]);
+  const maSeries = enabledAverages.map((config, index) => ({
+    name: `MA${config.period}`,
+    type: "line" as const,
+    data: computeMovingAverage(baseValues, config.period).map((value) =>
+      value === null ? null : Number(value.toFixed(4)),
+    ),
+    connectNulls: false,
+    showSymbol: false,
+    symbol: "none" as const,
+    lineStyle: {
+      color: MOVING_AVERAGE_COLORS[index % MOVING_AVERAGE_COLORS.length],
+      width: 1.5,
+    },
+  }));
 
   if (spec.kind === "line") {
     return {
@@ -137,6 +183,7 @@ function buildOption(spec: ReturnType<typeof adaptHistory>) {
           showSymbol: false,
           lineStyle: { color: "#6da7ff", width: 2 },
         },
+        ...maSeries,
       ],
     };
   }
@@ -153,7 +200,13 @@ function buildOption(spec: ReturnType<typeof adaptHistory>) {
     ],
     yAxis: [
       { type: "value" as const, scale: true, gridIndex: 0 },
-      { type: "value" as const, scale: true, gridIndex: 1, splitLine: { show: false } },
+      {
+        type: "value" as const,
+        scale: true,
+        gridIndex: 1,
+        splitLine: { show: false },
+        axisLabel: { show: false },
+      },
     ],
     dataZoom: [
       { type: "inside" as const, xAxisIndex: [0, 1] },
@@ -174,6 +227,7 @@ function buildOption(spec: ReturnType<typeof adaptHistory>) {
         data: spec.volumes,
         itemStyle: { color: "#53657d" },
       },
+      ...maSeries,
     ],
   };
 }

@@ -9,10 +9,13 @@ __pycache__/
 my_key.pem
 
 # 真实行情与数据库快照：不可随仓库再分发
-data/*.db
-data/*.db-wal
-data/*.db-shm
-data/samples/
+data/
+
+# 日志与工具缓存
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # 前端构建与依赖
 node_modules/

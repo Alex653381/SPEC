@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { getHistory } from "../api/client";
 import HistoryChart from "../charts/HistoryChart";
+import { aggregateHistory, type ChartPeriod } from "../charts/aggregate";
+import type { MovingAverageConfig } from "../charts/movingAverage";
 import { filterHistory, type DateRange } from "../charts/normalize";
 import type { ZoomWindow } from "../charts/sync";
 import type { Asset, History } from "../types";
@@ -9,6 +11,8 @@ import { buildSummary } from "./summary";
 
 interface AssetPanelProps {
   asset: Asset;
+  period: ChartPeriod;
+  movingAverages: MovingAverageConfig[];
   removable: boolean;
   range: DateRange;
   onHistory: (assetId: string, history: History) => void;
@@ -21,6 +25,8 @@ interface AssetPanelProps {
 
 export default function AssetPanel({
   asset,
+  period,
+  movingAverages,
   removable,
   range,
   onHistory,
@@ -34,6 +40,7 @@ export default function AssetPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [chartExpanded, setChartExpanded] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -41,7 +48,7 @@ export default function AssetPanel({
     setError(null);
     setHistory(null);
 
-    getHistory(asset.id, { limit: 500 }, controller.signal)
+    getHistory(asset.id, { limit: 2000 }, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) {
           setHistory(data);
@@ -62,13 +69,24 @@ export default function AssetPanel({
     if (history) onHistory(asset.id, history);
   }, [asset.id, history, onHistory]);
 
+  const periodHistory = useMemo(
+    () => (history ? aggregateHistory(history, period) : null),
+    [history, period],
+  );
   const displayHistory = useMemo(
-    () => (history ? filterHistory(history, range) : null),
-    [history, range],
+    () => (periodHistory ? filterHistory(periodHistory, range) : null),
+    [periodHistory, range],
+  );
+  const summaryWindow = useMemo<DateRange>(
+    () =>
+      zoomRange && zoomRange.start !== null && zoomRange.end !== null
+        ? { start: zoomRange.start, end: zoomRange.end }
+        : range,
+    [range, zoomRange],
   );
   const summary = useMemo(
-    () => (displayHistory ? buildSummary(asset, displayHistory, range) : null),
-    [asset, displayHistory, range],
+    () => (displayHistory ? buildSummary(asset, displayHistory, summaryWindow) : null),
+    [asset, displayHistory, summaryWindow],
   );
 
   return (
@@ -80,11 +98,21 @@ export default function AssetPanel({
             {asset.symbol} · {TYPE_LABELS[asset.asset_type]} · {asset.market}
           </div>
         </div>
-        {removable ? (
-          <button className="remove-button" onClick={() => onRemove(asset.id)}>
-            移除
-          </button>
-        ) : null}
+        <div className="panel-actions">
+          {displayHistory && displayHistory.count > 0 ? (
+            <button
+              className="chart-lightbox-header-button"
+              onClick={() => setChartExpanded((current) => !current)}
+            >
+              {chartExpanded ? "关闭" : "放大"}
+            </button>
+          ) : null}
+          {removable ? (
+            <button className="remove-button" onClick={() => onRemove(asset.id)}>
+              移除
+            </button>
+          ) : null}
+        </div>
       </header>
 
       {loading ? (
@@ -110,6 +138,9 @@ export default function AssetPanel({
           ) : null}
           <HistoryChart
             history={displayHistory}
+            movingAverages={movingAverages}
+            expanded={chartExpanded}
+            onExpandedChange={setChartExpanded}
             cursorDate={cursorDate}
             onCursorChange={onCursorChange}
             zoomRange={zoomRange}

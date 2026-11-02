@@ -1,6 +1,6 @@
 # SPEC 多资产行情研究
 
-个人及少数同学自用的多资产行情研究看板，支持股票、指数、场内 ETF 和场外基金。当前版本 `v1.0`，默认私有模式，不对公网开放。
+个人及少数同学自用的多资产行情研究看板，支持股票、指数、场内 ETF 和场外基金。当前版本 `v1.2`，默认私有模式，不对公网开放。
 
 ## 功能
 
@@ -10,13 +10,36 @@
 - 归一化表现比较、基准比较和轻量组合分析。
 - 只读数据状态、数据质量检查。
 - 本地数据管理面板：预检、显式确认后的增量更新、按代码新增真实资产、扩展历史。
+- 单资产图与多资产对比图支持放大查看。
+- 单资产图支持 1–250 日可配置均线，三档独立开关。
+- 数据管理面板支持展开与折叠。
 
 ## 技术栈
 
 - 后端：FastAPI、SQLite
 - 前端：React、TypeScript、Vite、Apache ECharts
 
+## 环境要求
+
+- Python 3.11+
+- Node.js 18+
+
 ## 快速启动
+
+首次 clone 后，从零准备本地环境：
+
+```powershell
+git clone <你的私人仓库地址>
+cd SPEC
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+.\.venv\Scripts\python.exe scripts\init_demo_db.py --path data\demo-synthetic.db --reset
+cd frontend
+npm install
+cd ..
+```
+
+随后启动服务：
 
 Windows 下双击或在项目根目录运行：
 
@@ -46,7 +69,7 @@ npm run dev
 .\.venv\Scripts\python.exe -m unittest discover -s backend/tests -t .
 .\.venv\Scripts\python.exe -m compileall -q backend scripts
 cd frontend
-node --experimental-strip-types --test src/charts/adapt.test.ts src/charts/normalize.test.ts src/charts/sync.test.ts src/workspace/panelState.test.ts src/workspace/summary.test.ts src/analysis/portfolio.test.ts
+node --experimental-strip-types --test src/charts/adapt.test.ts src/charts/movingAverage.test.ts src/charts/normalize.test.ts src/charts/sync.test.ts src/workspace/panelState.test.ts src/workspace/summary.test.ts src/analysis/portfolio.test.ts
 npm run build
 ```
 

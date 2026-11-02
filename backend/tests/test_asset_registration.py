@@ -5,7 +5,11 @@ from __future__ import annotations
 import unittest
 from datetime import date
 
-from backend.app.services.asset_registration import normalize_index_code, register_asset
+from backend.app.services.asset_registration import (
+    normalize_index_code,
+    normalize_stock_code,
+    register_asset,
+)
 
 
 class AssetRegistrationValidationTest(unittest.TestCase):
@@ -13,6 +17,12 @@ class AssetRegistrationValidationTest(unittest.TestCase):
         self.assertEqual("sh000688", normalize_index_code("000688"))
         self.assertEqual("sz399001", normalize_index_code("399001"))
         self.assertEqual("sh000001", normalize_index_code("sh000001"))
+
+    def test_stock_code_normalization(self):
+        self.assertEqual("sz000988", normalize_stock_code("000988"))
+        self.assertEqual("sh600519", normalize_stock_code("600519"))
+        self.assertEqual("sz300750", normalize_stock_code("300750"))
+        self.assertEqual("bj430047", normalize_stock_code("430047"))
 
     def test_invalid_stock_code_rejected_before_network(self):
         with self.assertRaises(ValueError):

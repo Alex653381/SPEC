@@ -65,8 +65,9 @@ def import_batch(
 
     skipped = len(records) - inserted
     post_issues = _post_check(conn, asset_id, data_class)
+    post_errors = [issue for issue in post_issues if getattr(issue, "severity", None) == "error"]
 
-    if post_issues:
+    if post_errors:
         raise TaskExecutionError(
             "写入后检查发现问题",
             error_code="POST_CHECK_FAILED",
@@ -76,8 +77,8 @@ def import_batch(
                 "inserted": inserted,
                 "skipped": skipped,
                 "conflicts": conflicts,
-                "post_check_issue_count": len(post_issues),
-                "issues": [issue.rule_id for issue in post_issues],
+                "post_check_issue_count": len(post_errors),
+                "issues": [issue.rule_id for issue in post_errors],
             },
         )
 
@@ -86,8 +87,8 @@ def import_batch(
         inserted=inserted,
         skipped=skipped,
         conflicts=conflicts,
-        post_check_issue_count=0,
-        issues=[],
+        post_check_issue_count=len(post_issues),
+        issues=post_issues,
     )
 
 
